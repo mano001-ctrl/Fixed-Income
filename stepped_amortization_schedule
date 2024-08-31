@@ -1,0 +1,135 @@
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+import matplotlib.pyplot as plt
+from tabulate import tabulate
+
+def calculate_stepped_amortization_schedule(principal, annual_interest_rate, years, monthly_days, start_date, balloon_payment, bill_type, annual_installment_increases):
+    schedule = []
+    remaining_balance = principal
+    payment_number = 1
+
+    # Create a start date for the schedule
+    start_date = datetime.strptime(start_date, "%Y-%m-%d")
+    payment_date = start_date + timedelta(days=30)  # Start payments one month after the start date
+
+    # Initial monthly installment
+    monthly_installment = bill_type
+
+    # Calculate monthly interest rates based on monthly_days
+    monthly_interest_rates = [(annual_interest_rate / 100) * (days / 365) for days in monthly_days]
+
+    for year in range(1, years + 1):
+        for month in range(1, 13):
+            if payment_number > len(monthly_days):  # If we've exhausted the monthly_days list, break
+                break
+
+            if remaining_balance <= balloon_payment:
+                break
+
+            interest_payment = remaining_balance * monthly_interest_rates[payment_number - 1]
+
+            principal_payment = monthly_installment - interest_payment
+            if principal_payment > remaining_balance:
+                principal_payment = remaining_balance
+            total_payment = principal_payment + interest_payment
+            # Create a new record for the schedule
+            schedule.append({
+                'date': payment_date,
+                'days': (payment_date - payment_date.replace(day=1)).days + 1,
+                'day': payment_date,
+                'base rate': annual_interest_rate,
+                'margin': 0,
+                'all rate': annual_interest_rate,
+                'interest': interest_payment,
+                'principal': 0,
+                'bill type': monthly_installment,  # Update to current monthly installment
+                'balance': remaining_balance - principal_payment
+            })
+
+            # Update the remaining balance
+            remaining_balance -= principal_payment
+
+            # Move to the next month
+            payment_date += timedelta(days=30)
+            payment_number += 1
+
+        # Increase the monthly installment by the annual increase rate
+        if year <= len(annual_installment_increases):
+            increase_percentage = annual_installment_increases[year - 1]
+            monthly_installment *= (1 + increase_percentage / 100)
+
+    # Add the balloon payment at the end
+    if remaining_balance > 0:
+        interest_payment = remaining_balance * monthly_interest_rates[payment_number - 1]
+        total_payment = remaining_balance + interest_payment
+
+        schedule.append({
+            'date': payment_date,
+            'days': (payment_date - payment_date.replace(day=1)).days + 1,
+            'day': payment_date,
+            'base rate': annual_interest_rate,
+            'margin': 0,
+            'all rate': annual_interest_rate,
+            'interest': interest_payment,
+            'principal': 0,
+            'bill type': monthly_installment,  # Update to current monthly installment
+            'balance': 0
+        })
+
+    # Convert the schedule to a DataFrame
+    df_schedule = pd.DataFrame(schedule)
+
+    return df_schedule
+
+# Example usage
+principal = 98605000  # Principal loan amount
+annual_interest_rate = 10.75  # Annual interest rate in percentage
+years = 8  # Loan term in years
+start_date = "2026-06-15"  # Start date for the schedule
+balloon_payment = 69023500  # Balloon payment amount
+bill_type = 940114.06  # Example bill type
+annual_installment_increases = (5, 5, 5, 5, 5, 5, 5, 5)
+
+# Monthly days for each month (assuming a fixed 8-year term, you should provide the correct list)
+monthly_days = [
+    30, 33, 29, 30, 32, 29, 31, 31, 28, 31, 32, 29, 30, 32, 30, 30, 31, 30, 17, 16,
+    29, 29, 33, 28, 31, 32, 29, 31, 31, 30, 30, 17, 14, 31, 28, 32, 29, 31, 31, 30,
+    33, 28, 31, 32, 29, 31, 28, 31, 30, 33, 28, 31, 32, 29, 31, 31, 30, 33, 28, 29,
+    30, 33, 28, 31, 31, 30, 33, 28, 17, 14, 32, 28, 31, 32, 29, 30, 32, 30, 30, 31,
+    30, 17, 16, 29, 28, 31, 31, 30, 30, 31, 31, 32, 29, 30, 32, 30, 28, 33, 28, 31,
+    30
+]
+
+schedule = calculate_stepped_amortization_schedule(principal, annual_interest_rate, years, monthly_days, start_date, balloon_payment, bill_type, annual_installment_increases)
+
+# Display the amortization schedule
+print(tabulate(schedule.head(), headers='keys', tablefmt='psql'))
+display(schedule)
+
+# Plotting the amortization schedule with stacked bar chart
+fig, ax1 = plt.subplots(figsize=(14, 7))
+
+# Plot the interest and principal payments as stacked bars
+ax1.bar(schedule.index, schedule['principal'], label='Principal Payment', color='b')
+ax1.bar(schedule.index, schedule['interest'], bottom=schedule['principal'], label='Interest Payment', color='r')
+
+# Set labels and title
+ax1.set_xlabel('Payment Number')
+ax1.set_ylabel('Payment Amount ($)')
+ax1.set_title('Stepped Amortization Schedule')
+ax1.legend(loc='upper right')
+ax1.grid(True)
+
+# Create a second y-axis for the remaining balance
+ax2 = ax1.twinx()
+ax2.plot(schedule.index, schedule['balance'], label='Remaining Balance', color='g')
+ax2.set_ylabel('Remaining Balance ($)')
+ax2.legend(loc='upper center')
+
+plt.show()
+
+# Export the amortization schedule to a CSV file
+csv_file_path = 'stepped_amortization_schedule.csv'
+
+print(f"Amortization schedule exported to {csv_file_path}")
